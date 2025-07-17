@@ -1,0 +1,390 @@
+---
+title: "Análisis de UPA: Simulación de Muestreo"
+format:
+  html:
+    toc: true
+    code-fold: true
+    code-tools: true
+---
+
+# 1. Introducción
+
+En este análisis exploramos la base UPA para mostrar el procesamiento de datos, correlaciones, simulaciones de muestreo y visualizaciones, empleando R y Quarto.
+
+## 2. Correlaciones
+
+Tabla de correlaciones entre las variables seleccionadas, el total de UPA y la población.
+
+```{r}
+#| message: false
+#| warning: false
+#| paged-print: false
+library(readr)
+library(kableExtra)
+correlaciones <- read_csv("tabla_correlaciones.csv")
+kable(correlaciones, digits = 2, caption = "Correlaciones") %>%
+  kable_styling(full_width = FALSE)
+```
+
+## 3. Varianza intra-municipal
+
+Para estimar la variabilidad de la variable binaria de interés dentro de los municipios con mayor número de UPA, calculamos la **varianza intra-municipal** y su promedio ponderado para los 5 municipios con más UPA.
+
+### Top 5 municipios por total de UPA
+
+```{r, message=FALSE, warning=FALSE}
+library(readr)
+library(kableExtra)
+top5 <- read_csv("top5_municipios.csv")
+kable(top5, caption = "Top 5 municipios por total de UPA") %>%
+  kable_styling(full_width = FALSE)
+```
+
+### Cálculo de la varianza intra-municipal
+
+Para cada municipio, calculamos la varianza intra-municipal de la variable binaria seleccionada (`P_S3P9_bin`).
+Luego, calculamos el **promedio ponderado** de esas varianzas, usando como peso el número de UPA en cada municipio.
+
+
+```{r, message=FALSE, warning=FALSE}
+var_intra <- read_csv("var_intra_top5.csv")
+kable(var_intra, digits=3, caption = "Varianza intra-municipal por municipio (Top 5 UPA)") %>%
+  kable_styling(full_width = FALSE)
+```
+
+El **promedio ponderado de la varianza intra-municipal** para `P_S3P9_bin` es:
+
+```{r, echo=FALSE}
+mean_var_intra <- weighted.mean(var_intra$var_muni, var_intra$n, na.rm = TRUE)
+round(mean_var_intra, 3)
+```
+
+> **Interpretación:** Este valor resume la variabilidad de la variable de interés dentro de los municipios más grandes y es útil para estimar la correlación intraclase ($\rho$) al calcular el efecto de diseño (DEFF) en muestreo por conglomerados.
+
+## 5. Fórmulas utilizadas
+
+A continuación se resumen las principales fórmulas empleadas en el proyecto de muestreo en dos etapas (πPT–MAS), con explicación y referencia.
+
+---
+
+### 1. Probabilidad de inclusión en muestreo en dos etapas
+
+$$
+\pi_k = \pi_{1i} \cdot \pi_{2k|i}
+$$
+
+- $\pi_{1i}$: Probabilidad de inclusión del municipio $i$ (UPM).
+- $\pi_{2k|i}$: Probabilidad de inclusión de la UPA $k$ dentro del municipio $i$ (USM).
+
+---
+
+### 2. Probabilidad de inclusión del municipio (UPM, por πPT)
+
+$$
+\pi_{1i} = \frac{n_I \cdot x_i}{\sum_{j=1}^{N_I} x_j}
+$$
+
+- $n_I$: Número de municipios (UPM) seleccionados.
+- $x_i$: Tamaño de la variable auxiliar (ejemplo: UPA en municipio $i$).
+- $\sum_{j=1}^{N_I} x_j$: Suma total de la variable auxiliar.
+
+---
+
+### 3. Probabilidad de inclusión de la UPA dentro del municipio (MAS)
+
+$$
+\pi_{2k|i} = \frac{n_{upa}}{N_{UPA_i}}
+$$
+
+- $n_{upa}$: Número de UPA seleccionadas por municipio.
+- $N_{UPA_i}$: Total de UPA en el municipio $i$.
+
+---
+
+### 4. Peso de expansión de cada UPA
+
+$$
+w_k = \frac{1}{\pi_k}
+$$
+
+---
+
+### 5. Estimador de Horvitz-Thompson (HT) para el total nacional
+
+$$
+\hat{T}_\pi = \sum_{k \in m} \frac{y_k}{\pi_k} = \sum_{k \in m} y_k \cdot w_k
+$$
+
+- $y_k$: Valor de la variable de estudio para la UPA $k$.
+- $w_k$: Peso de expansión de la UPA $k$.
+
+---
+
+### 6. Varianza intra-municipal (para estimar $\rho$ y DEFF)
+
+$$
+\text{Varianza intra-municipal promedio} = \frac{\sum_{i=1}^5 n_i \cdot \text{var}_i}{\sum_{i=1}^5 n_i}
+$$
+
+- $\text{var}_i$: Varianza intra-municipal para el municipio $i$.
+- $n_i$: Número de UPA en el municipio $i$.
+
+---
+
+### 7. Efecto de diseño (DEFF) para conglomerados
+
+> **Nota:**  
+> El **efecto de diseño (DEFF)** en este proyecto se calculó usando el **tamaño de muestra de UPA seleccionadas por municipio** ($n_{upa}$), **no el promedio poblacional**, ya que este es el valor relevante para la varianza bajo el diseño aplicado.
+
+$$
+\boxed{
+\text{DEFF} = 1 + (n_{upa} - 1)\rho
+}
+$$
+
+- $n_{upa}$: Número de UPA seleccionadas por municipio en la muestra.
+- $\rho$: Coeficiente de correlación intraclásica.
+
+---
+
+### 8. Cálculo del tamaño de muestra necesario para un error dado
+
+$$
+n = \frac{\text{DEFF} \cdot P(1 - P)}{e^2}
+$$
+
+- $P$: Proporción esperada de la variable de interés.
+- $e$: Error máximo tolerado (en proporción, por ejemplo 0.03 para 3%).
+
+---
+
+### 9. Cálculo del número de municipios a seleccionar
+
+$$
+m_1 = \frac{n}{n_{upa}}
+$$
+
+- $n_{upa}$: Tamaño de muestra de UPA por municipio.
+
+---
+
+### 10. Error relativo promedio de la estimación
+
+$$
+\text{Error relativo} = 100 \times \frac{|\hat{T}_\pi - T_{real}|}{T_{real}}
+$$
+
+---
+
+#### **Referencias principales**
+
+- Manual CEPAL de muestreo para encuestas de hogares y agropecuarias (págs. 129-131)
+- Notas de clase Capítulos 3 y 4
+
+---
+
+## 6. Simulación, cálculo del estimador y DEFF
+
+En esta sección se documenta el proceso de simulación Monte Carlo para evaluar el comportamiento del estimador Horvitz-Thompson en muestreo en dos etapas (πPT–MAS) y su sensibilidad frente al tamaño de muestra. Se presentan los resultados para tres variables de interés: autoconsumo, maquinaria y pesca.
+
+---
+
+### 6.1 Descripción de la simulación
+
+Se simularon diferentes escenarios combinando:
+- **Número de municipios seleccionados:** 5, 8, 10, 12, 15
+- **Número de UPA por municipio:** 10, 15, 20
+- **Repeticiones Monte Carlo:** 200
+- **Coeficiente intraclásico ($\rho$):** 0.02 (según estimación/literatura)
+
+En cada escenario se estima el total poblacional usando el **estimador Horvitz-Thompson**, y se calcula el error relativo promedio y el **efecto de diseño (DEFF)** asociado a la muestra.
+
+---
+
+### 6.2 Código de simulación y explicación
+
+El siguiente bloque presenta la función de simulación empleada (comentada parte por parte y enlazada a las fórmulas teóricas):
+
+```{r, eval=FALSE}
+# Definición de parámetros
+municipios_a_probar <- c(5, 8, 10, 12, 15)
+upa_a_probar <- c(10, 15, 20)
+rho <- 0.02
+reps <- 200
+
+simula_variable_binaria <- function(var_bin) {
+  upa_final_filtrado <- upa_final[!is.na(upa_final[[var_bin]]), ]
+  total_real <- sum(upa_final_filtrado[[var_bin]], na.rm = TRUE) # (Referente censal)
+  resultados <- data.frame()
+  set.seed(123)
+  for (N_munis in municipios_a_probar) {
+    for (N_upa in upa_a_probar) {
+      estimadores <- numeric(reps)
+      for (i in 1:reps) {
+        # 1. Selección de municipios (UPM) con probabilidad proporcional al tamaño (PPT, ver Fórmula 2)
+        upa_upm$prob <- upa_upm$total_upa / sum(upa_upm$total_upa)
+        sampled_munis <- sample(
+          upa_upm$P_MUNIC,
+          size = N_munis,
+          prob = upa_upm$prob,
+          replace = FALSE
+        )
+        muestra <- data.frame()
+        for (muni in sampled_munis) {
+          # 2. Selección de UPA dentro del municipio (MAS, ver Fórmula 3)
+          upa_muni <- upa_final_filtrado %>% filter(P_MUNIC == muni)
+          size <- min(N_upa, nrow(upa_muni))
+          if(size == 0) next
+          sampled_upa <- upa_muni %>% sample_n(size)
+          muestra <- rbind(muestra, sampled_upa)
+        }
+        muestra[[var_bin]] <- as.numeric(muestra[[var_bin]])
+        muestra <- muestra %>%
+          left_join(upa_upm[, c("P_MUNIC", "total_upa", "prob")], by = "P_MUNIC") %>%
+          # 3. Cálculo de probabilidades y pesos de expansión (Fórmulas 1, 4)
+          mutate(
+            pi_1 = N_munis * total_upa / sum(upa_upm$total_upa),        # PPT
+            pi_2 = N_upa / total_upa,                                   # MAS
+            pi = pi_1 * pi_2,                                           # Probabilidad total de inclusión
+            peso_expansion = 1 / pi                                     # Peso de expansión
+          )
+        # 4. Estimador Horvitz-Thompson (HT, ver Fórmula 5)
+        estimadores[i] <- sum(muestra[[var_bin]] * muestra$peso_expansion, na.rm = TRUE)
+      }
+      # 5. Error relativo promedio (ver Fórmula 10)
+      error_promedio <- 100 * mean(abs(estimadores - total_real) / total_real)
+      # 6. Efecto de diseño (DEFF, ver fórmula corregida: usa el n° de UPA muestrales)
+      deff <- 1 + (N_upa - 1) * rho
+      resultados <- rbind(resultados, data.frame(
+        municipios = N_munis,
+        upa = N_upa,
+        error_promedio = round(error_promedio, 2),
+        deff = round(deff, 2)
+      ))
+    }
+  }
+  return(resultados)
+}
+```
+
+
+### 6.3 Resultados para cada variable
+
+A continuación se muestran los resultados para cada variable binaria estudiada.  
+Las tablas resumen el **error relativo promedio** y el **DEFF** para cada combinación de tamaños de muestra, y los gráficos muestran la sensibilidad del error respecto al diseño muestral.
+
+---
+
+#### Autoconsumo
+
+```{r, message=FALSE, warning=FALSE}
+library(readr)
+library(kableExtra)
+resultados_autoconsumo <- read_csv("resultados_autoconsumo.csv")
+kable(resultados_autoconsumo, caption = "Resultados de simulación: Autoconsumo") %>%
+  kable_styling(full_width = FALSE)
+```
+
+![](grafico_autoconsumo.png)
+
+---
+
+#### Maquinaria
+
+```{r, message=FALSE, warning=FALSE}
+resultados_maquinaria <- read_csv("resultados_maquinaria.csv")
+kable(resultados_maquinaria, caption = "Resultados de simulación: Maquinaria") %>%
+  kable_styling(full_width = FALSE)
+```
+
+![](grafico_maquinaria.png)
+
+---
+
+#### Pesca
+
+```{r, message=FALSE, warning=FALSE}
+resultados_pesca <- read_csv("resultados_pesca.csv")
+kable(resultados_pesca, caption = "Resultados de simulación: Pesca") %>%
+  kable_styling(full_width = FALSE)
+```
+
+![](grafico_pesca.png)
+
+
+> **Interpretación:**
+> Las tablas y gráficos permiten comparar el error relativo y el DEFF para distintos tamaños de muestra, evidenciando la relación entre el diseño muestral y la precisión del estimador Horvitz-Thompson en cada variable. Esto facilita la selección de combinaciones óptimas para futuros diseños de encuesta.
+
+
+### 6.5 Simulación final del escenario recomendado
+
+Para evaluar la precisión en un escenario concreto, realizamos una simulación Monte Carlo con el **diseño recomendado**:  
+- 10 municipios seleccionados  
+- 15 UPA por municipio  
+- 200 repeticiones  
+- $\rho = 0.02$
+
+---
+
+#### Código de la simulación final (comentado paso a paso)
+
+```{r, eval=FALSE}
+# --- 1. Calcula el total real nacional de UPA con autoconsumo (censo)
+total_real_autoconsumo <- sum(upa_final$P_S3P9_bin, na.rm = TRUE)  # Referencia censal
+
+# --- 2. Simulación Monte Carlo para el diseño recomendado
+municipios_a_probar <- c(10)    # Número de municipios a muestrear
+upa_a_probar <- c(15)           # Número de UPA por municipio
+reps <- 200                     # Número de repeticiones
+rho <- 0.02                     # Correlación intraclásica (ver Fórmulas 6 y 7)
+
+estimadores_autoconsumo <- numeric(reps)
+set.seed(123)
+for (i in 1:reps) {
+  # 1. Selección de municipios (UPM) con probabilidad proporcional al tamaño (PPT, Fórmula 2)
+  upa_upm$prob <- upa_upm$total_upa / sum(upa_upm$total_upa)
+  sampled_munis <- sample(
+    upa_upm$P_MUNIC,
+    size = municipios_a_probar,
+    prob = upa_upm$prob,
+    replace = FALSE
+  )
+  muestra <- data.frame()
+  for (muni in sampled_munis) {
+    # 2. Selección de UPA dentro del municipio (MAS, Fórmula 3)
+    upa_muni <- upa_final %>% filter(P_MUNIC == muni & !is.na(P_S3P9_bin))
+    size <- min(upa_a_probar, nrow(upa_muni))
+    if(size == 0) next
+    sampled_upa <- upa_muni %>% sample_n(size)
+    muestra <- rbind(muestra, sampled_upa)
+  }
+  muestra$P_S3P9_bin <- as.numeric(muestra$P_S3P9_bin)
+  muestra <- muestra %>%
+    left_join(upa_upm[, c("P_MUNIC", "total_upa", "prob")], by = "P_MUNIC") %>%
+    # 3. Cálculo de probabilidades y pesos de expansión (Fórmulas 1 y 4)
+    mutate(
+      pi_1 = municipios_a_probar * total_upa / sum(upa_upm$total_upa),    # PPT
+      pi_2 = upa_a_probar / total_upa,                                   # MAS
+      pi = pi_1 * pi_2,                                                  # Probabilidad de inclusión
+      peso_expansion = 1 / pi                                            # Peso de expansión
+    )
+  # 4. Estimador Horvitz-Thompson (HT, Fórmula 5)
+  estimadores_autoconsumo[i] <- sum(muestra$P_S3P9_bin * muestra$peso_expansion, na.rm = TRUE)
+}
+
+# --- 3. Resumen de resultados
+HT_promedio <- mean(estimadores_autoconsumo)
+error_relativo <- 100 * abs(HT_promedio - total_real_autoconsumo) / total_real_autoconsumo
+```
+
+---
+
+#### **Resultados resumen**
+
+```{r, message=FALSE, warning=FALSE}
+resumen <- readr::read_csv("resumen_autoconsumo.csv")
+library(knitr)
+kable(resumen, caption = "Resumen de estimación final para autoconsumo") %>%
+  kableExtra::kable_styling(full_width = FALSE)
+```
+
